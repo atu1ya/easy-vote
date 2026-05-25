@@ -47,34 +47,49 @@ const getHighestRankCount = (ballots) => {
   return highestRank;
 };
 
-const resolveEliminationTie = (tiedCandidateIds, ballots) => {
-  const maxRank = getHighestRankCount(ballots);
+const DEADLOCK_MESSAGE = 'Deadlock reached. Tie persists after exhaustive preference analysis. Manual determination required.';
 
-  for (let rank = 2; rank <= maxRank; rank += 1) {
-    const supportByCandidateId = Object.fromEntries(tiedCandidateIds.map((candidateId) => [candidateId, 0]));
+const countPreferenceVotes = (candidateId, ballots, preferenceIndex) => {
+  let totalVotes = 0;
 
-    ballots.forEach((ballot) => {
-      const rankedCandidateId = ballot[rank - 1];
-
-      if (rankedCandidateId && Object.hasOwn(supportByCandidateId, rankedCandidateId)) {
-        supportByCandidateId[rankedCandidateId] += 1;
-      }
-    });
-
-    const supportValues = tiedCandidateIds.map((candidateId) => supportByCandidateId[candidateId]);
-    const minimumSupport = Math.min(...supportValues);
-    const maximumSupport = Math.max(...supportValues);
-
-    if (minimumSupport !== maximumSupport) {
-      const lowestSupportCandidates = tiedCandidateIds.filter((candidateId) => supportByCandidateId[candidateId] === minimumSupport);
-
-      if (lowestSupportCandidates.length === 1) {
-        return lowestSupportCandidates[0];
-      }
+  ballots.forEach((ballot) => {
+    if (ballot[preferenceIndex] === candidateId) {
+      totalVotes += 1;
     }
+  });
+
+  return totalVotes;
+};
+
+const resolveEliminationTie = (tiedCandidateIds, ballots, preferenceIndex = 1) => {
+  if (tiedCandidateIds.length <= 1) {
+    return tiedCandidateIds[0] ?? null;
   }
 
-  return null;
+  const maxRank = getHighestRankCount(ballots);
+
+  if (preferenceIndex >= maxRank) {
+    return null;
+  }
+
+  const supportByCandidateId = Object.fromEntries(
+    tiedCandidateIds.map((candidateId) => [candidateId, countPreferenceVotes(candidateId, ballots, preferenceIndex)]),
+  );
+
+  const highestSupport = Math.max(...Object.values(supportByCandidateId));
+  const protectedCandidates = tiedCandidateIds.filter((candidateId) => supportByCandidateId[candidateId] === highestSupport);
+
+  if (protectedCandidates.length === tiedCandidateIds.length) {
+    return resolveEliminationTie(tiedCandidateIds, ballots, preferenceIndex + 1);
+  }
+
+  const eliminationPool = tiedCandidateIds.filter((candidateId) => supportByCandidateId[candidateId] < highestSupport);
+
+  if (eliminationPool.length === 1) {
+    return eliminationPool[0];
+  }
+
+  return resolveEliminationTie(eliminationPool, ballots, preferenceIndex + 1);
 };
 
 const calculatePreferentialResults = (candidates, ballots) => {
@@ -142,8 +157,6 @@ const calculatePreferentialResults = (candidates, ballots) => {
     const tiedForElimination = activeCandidateIds.filter((candidateId) => voteCounts[candidateId] === minimumVoteTotal);
 
     if (activeCandidateIds.length === 2 && tiedForElimination.length === 2) {
-      const tiedNames = tiedForElimination.map((candidateId) => candidateById[candidateId].name).join(' and ');
-
       return {
         candidateById,
         roundSummaries,
@@ -151,7 +164,7 @@ const calculatePreferentialResults = (candidates, ballots) => {
         placementOrder: [...eliminatedOrder.slice().reverse(), ...activeCandidateIds],
         winnerId: null,
         isTieStop: true,
-        tieMessage: `The final two candidates, ${tiedNames}, are tied. Manual determination is required under your election rules.`,
+        tieMessage: DEADLOCK_MESSAGE,
       };
     }
 
@@ -161,8 +174,6 @@ const calculatePreferentialResults = (candidates, ballots) => {
       const resolvedLoserId = resolveEliminationTie(tiedForElimination, ballots);
 
       if (!resolvedLoserId) {
-        const tiedNames = tiedForElimination.map((candidateId) => candidateById[candidateId].name).join(', ');
-
         return {
           candidateById,
           roundSummaries,
@@ -170,7 +181,7 @@ const calculatePreferentialResults = (candidates, ballots) => {
           placementOrder: [...eliminatedOrder.slice().reverse(), ...activeCandidateIds],
           winnerId: null,
           isTieStop: true,
-          tieMessage: `An elimination tie between ${tiedNames} could not be resolved mathematically from the ballot preferences. Manual determination is required.`,
+          tieMessage: DEADLOCK_MESSAGE,
         };
       }
 
@@ -188,7 +199,7 @@ const calculatePreferentialResults = (candidates, ballots) => {
     placementOrder: eliminatedOrder.slice().reverse(),
     winnerId: null,
     isTieStop: true,
-    tieMessage: 'No winner could be determined from the submitted ballots.',
+    tieMessage: DEADLOCK_MESSAGE,
   };
 };
 
