@@ -12,7 +12,8 @@ body {
   margin: 0;
   min-width: 320px;
   font-family: 'Manrope', 'Segoe UI', sans-serif;
-  background: #f8fafc;
+  background: #fffdf5;
+  color: #1a1a1a;
 }
 
 * {
@@ -21,6 +22,16 @@ body {
 
 .printable-report {
   color: #0f172a;
+}
+
+::selection {
+  background: #fcd703;
+  color: #1a1a1a;
+}
+
+input,
+button {
+  font: inherit;
 }
 
 @media print {
