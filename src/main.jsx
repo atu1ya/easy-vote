@@ -61,35 +61,85 @@ const countPreferenceVotes = (candidateId, ballots, preferenceIndex) => {
   return totalVotes;
 };
 
-const resolveEliminationTie = (tiedCandidateIds, ballots, preferenceIndex = 1) => {
+const resolveEliminationTie = (tiedCandidateIds, ballots, preferenceIndex = 1, auditSteps = []) => {
   if (tiedCandidateIds.length <= 1) {
-    return tiedCandidateIds[0] ?? null;
+    return {
+      eliminatedCandidateId: tiedCandidateIds[0] ?? null,
+      auditSteps,
+      deadlock: false,
+    };
   }
 
   const maxRank = getHighestRankCount(ballots);
 
   if (preferenceIndex >= maxRank) {
-    return null;
+    return {
+      eliminatedCandidateId: null,
+      auditSteps: [
+        ...auditSteps,
+        {
+          preferenceNumber: preferenceIndex + 1,
+          supportByCandidateId: Object.fromEntries(tiedCandidateIds.map((candidateId) => [candidateId, 0])),
+          decision: 'deadlock',
+          message: DEADLOCK_MESSAGE,
+        },
+      ],
+      deadlock: true,
+    };
   }
 
   const supportByCandidateId = Object.fromEntries(
     tiedCandidateIds.map((candidateId) => [candidateId, countPreferenceVotes(candidateId, ballots, preferenceIndex)]),
   );
 
-  const highestSupport = Math.max(...Object.values(supportByCandidateId));
-  const protectedCandidates = tiedCandidateIds.filter((candidateId) => supportByCandidateId[candidateId] === highestSupport);
+  const supportValues = tiedCandidateIds.map((candidateId) => supportByCandidateId[candidateId]);
+  const highestSupport = Math.max(...supportValues);
+  const lowestSupport = Math.min(...supportValues);
+  const protectedCandidateIds = tiedCandidateIds.filter((candidateId) => supportByCandidateId[candidateId] === highestSupport);
+  const eliminationPool = tiedCandidateIds.filter((candidateId) => supportByCandidateId[candidateId] === lowestSupport);
 
-  if (protectedCandidates.length === tiedCandidateIds.length) {
-    return resolveEliminationTie(tiedCandidateIds, ballots, preferenceIndex + 1);
+  const stepAudit = {
+    preferenceNumber: preferenceIndex + 1,
+    supportByCandidateId,
+    highestSupport,
+    lowestSupport,
+    protectedCandidateIds,
+    eliminationPool,
+  };
+
+  if (eliminationPool.length === tiedCandidateIds.length) {
+    return resolveEliminationTie(tiedCandidateIds, ballots, preferenceIndex + 1, [
+      ...auditSteps,
+      {
+        ...stepAudit,
+        decision: 'tie persists',
+      },
+    ]);
   }
-
-  const eliminationPool = tiedCandidateIds.filter((candidateId) => supportByCandidateId[candidateId] < highestSupport);
 
   if (eliminationPool.length === 1) {
-    return eliminationPool[0];
+    return {
+      eliminatedCandidateId: eliminationPool[0],
+      auditSteps: [
+        ...auditSteps,
+        {
+          ...stepAudit,
+          decision: 'eliminate',
+          eliminatedCandidateId: eliminationPool[0],
+        },
+      ],
+      deadlock: false,
+    };
   }
 
-  return resolveEliminationTie(eliminationPool, ballots, preferenceIndex + 1);
+  return resolveEliminationTie(eliminationPool, ballots, preferenceIndex + 1, [
+    ...auditSteps,
+    {
+      ...stepAudit,
+      decision: 'narrow tie',
+      narrowedCandidateIds: eliminationPool,
+    },
+  ]);
 };
 
 const calculatePreferentialResults = (candidates, ballots) => {
@@ -98,6 +148,7 @@ const calculatePreferentialResults = (candidates, ballots) => {
   const eliminatedOrder = [];
   const roundSummaries = [];
   const finalVoteTotals = {};
+  const tieBreakAudits = [];
 
   while (activeCandidateIds.length > 0) {
     const voteCounts = Object.fromEntries(activeCandidateIds.map((candidateId) => [candidateId, 0]));
@@ -156,28 +207,23 @@ const calculatePreferentialResults = (candidates, ballots) => {
     const minimumVoteTotal = Math.min(...activeCandidateIds.map((candidateId) => voteCounts[candidateId]));
     const tiedForElimination = activeCandidateIds.filter((candidateId) => voteCounts[candidateId] === minimumVoteTotal);
 
-    if (activeCandidateIds.length === 2 && tiedForElimination.length === 2) {
-      return {
-        candidateById,
-        roundSummaries,
-        finalVoteTotals,
-        placementOrder: [...eliminatedOrder.slice().reverse(), ...activeCandidateIds],
-        winnerId: null,
-        isTieStop: true,
-        tieMessage: DEADLOCK_MESSAGE,
-      };
-    }
-
     let eliminatedCandidateId = tiedForElimination[0];
 
     if (tiedForElimination.length > 1) {
-      const resolvedLoserId = resolveEliminationTie(tiedForElimination, ballots);
+      const resolution = resolveEliminationTie(tiedForElimination, ballots);
 
-      if (!resolvedLoserId) {
+      tieBreakAudits.push({
+        roundNumber: roundSummaries.length,
+        tiedCandidateIds: [...tiedForElimination],
+        ...resolution,
+      });
+
+      if (!resolution.eliminatedCandidateId) {
         return {
           candidateById,
           roundSummaries,
           finalVoteTotals,
+          tieBreakAudits,
           placementOrder: [...eliminatedOrder.slice().reverse(), ...activeCandidateIds],
           winnerId: null,
           isTieStop: true,
@@ -185,7 +231,7 @@ const calculatePreferentialResults = (candidates, ballots) => {
         };
       }
 
-      eliminatedCandidateId = resolvedLoserId;
+      eliminatedCandidateId = resolution.eliminatedCandidateId;
     }
 
     eliminatedOrder.push(eliminatedCandidateId);
@@ -196,6 +242,7 @@ const calculatePreferentialResults = (candidates, ballots) => {
     candidateById,
     roundSummaries,
     finalVoteTotals,
+    tieBreakAudits,
     placementOrder: eliminatedOrder.slice().reverse(),
     winnerId: null,
     isTieStop: true,
@@ -626,6 +673,60 @@ const App = () => {
         <section className="rounded-[2rem] border border-[#fcd703]/60 bg-[#fcd703]/15 p-5 text-[#2c2010]" role="alert">
           <div className="text-sm font-bold uppercase tracking-[0.2em]">Tie alert</div>
           <p className="mt-2 text-base leading-7">{calculation.tieMessage}</p>
+        </section>
+      ) : null}
+
+      {calculation?.tieBreakAudits?.length ? (
+        <section className="rounded-[2rem] border border-[#c87820]/25 bg-white p-6 shadow-soft">
+          <h2 className="text-lg font-bold text-[#1a1a1a]">Tie-break audit</h2>
+          <p className="mt-2 text-sm text-[#2c2010]">
+            This shows the exact preference depth counts used to resolve each elimination tie.
+          </p>
+
+          <div className="mt-4 space-y-3">
+            {calculation.tieBreakAudits.map((audit, auditIndex) => {
+              const tiedNames = audit.tiedCandidateIds.map((candidateId) => calculation.candidateById[candidateId].name).join(', ');
+
+              return (
+                <details
+                  key={`${audit.roundNumber}-${auditIndex}`}
+                  className="rounded-2xl border border-[#d48020]/20 bg-[#fbf6dc] p-4"
+                  open={auditIndex === 0}
+                >
+                  <summary className="cursor-pointer list-none text-sm font-bold text-[#1a1a1a]">
+                    Round {audit.roundNumber}: tie among {tiedNames}
+                  </summary>
+
+                  <div className="mt-4 space-y-3 text-sm text-[#2c2010]">
+                    <div className="rounded-xl bg-white px-4 py-3">
+                      <span className="font-bold text-[#1a1a1a]">Outcome: </span>
+                      {audit.deadlock ? DEADLOCK_MESSAGE : `Eliminated ${calculation.candidateById[audit.eliminatedCandidateId]?.name ?? 'unknown candidate'}`}
+                    </div>
+
+                    {audit.auditSteps.map((step, stepIndex) => (
+                      <div key={`${audit.roundNumber}-${stepIndex}`} className="rounded-xl bg-white px-4 py-3">
+                        <div className="font-bold text-[#1a1a1a]">Preference {step.preferenceNumber}</div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {Object.entries(step.supportByCandidateId).map(([candidateId, support]) => (
+                            <span key={candidateId} className="rounded-full bg-[#f5e060] px-3 py-1 text-xs font-semibold text-[#2c2010]">
+                              {calculation.candidateById[candidateId].name}: {support}
+                            </span>
+                          ))}
+                        </div>
+                        <div className="mt-2 text-sm">
+                          <span className="font-semibold text-[#1a1a1a]">Decision: </span>
+                          {step.decision}
+                          {step.eliminatedCandidateId ? ` (${calculation.candidateById[step.eliminatedCandidateId]?.name ?? 'unknown candidate'})` : ''}
+                          {step.narrowedCandidateIds ? `, narrowed to ${step.narrowedCandidateIds.map((candidateId) => calculation.candidateById[candidateId].name).join(', ')}` : ''}
+                          {step.message ? ` - ${step.message}` : ''}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              );
+            })}
+          </div>
         </section>
       ) : null}
 
