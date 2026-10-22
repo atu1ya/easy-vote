@@ -32,6 +32,24 @@ npm run build
 - Saves the session as you go, so a refresh or a flat battery does not lose the
   count.
 
+## Transcribing quickly
+
+The screen is built around entering a lot of slips without touching the mouse.
+
+- **One row per candidate** (default): type the number, press
+  <kbd>Enter</kbd> or <kbd>↓</kbd> to move down, and <kbd>Enter</kbd> on the
+  last candidate records the slip. Focus returns to the top, ready for the next
+  one.
+- **Fast entry**: one field for the whole slip. With candidates listed Alice,
+  Bob, Carol, typing `213` means Alice was marked 2, Bob 1, Carol 3. Use a dot
+  for an unmarked candidate (`1.3`), and commas where there are ten or more
+  candidates. <kbd>Enter</kbd> records.
+- A panel under the form says how the slip **will** be counted before you
+  commit it, including any defect, so a problem is caught at the slip rather
+  than discovered at the end.
+- **Undo** removes the slip you just entered and puts its numbers back in the
+  form for correction. Older slips are amended or voided from the ledger.
+
 ## Outputs
 
 | File | Contents |
