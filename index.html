@@ -3,10 +3,33 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Easy Vote</title>
+    <meta name="color-scheme" content="light" />
+    <meta
+      name="description"
+      content="Counts UEC preferential paper ballots and produces an auditable PDF count report. Runs entirely in your browser."
+    />
+    <title>Easy Vote &mdash; UEC preferential count</title>
+
+    <!-- Loaded as a link rather than a CSS @import so a slow or absent network
+         delays nothing: the system font stack renders immediately. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&display=swap"
+    />
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <div style="max-width: 40rem; margin: 4rem auto; font-family: system-ui, sans-serif; line-height: 1.6">
+        <h1>JavaScript is required</h1>
+        <p>
+          Easy Vote counts ballots in your browser, so it needs JavaScript enabled. No ballot data is ever sent
+          anywhere.
+        </p>
+      </div>
+    </noscript>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
