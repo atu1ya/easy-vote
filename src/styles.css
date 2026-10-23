@@ -1,4 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&display=swap');
+/* The webfont is linked from index.html instead of imported here, so a slow or
+   unavailable network never blocks first paint. Counting rooms have bad wifi. */
 
 @tailwind base;
 @tailwind components;
@@ -32,6 +33,44 @@ body {
 input,
 button {
   font: inherit;
+}
+
+/* Keep focus obvious for keyboard-driven transcription. */
+:focus-visible {
+  outline: 3px solid #c87820;
+  outline-offset: 2px;
+}
+
+/* Remove the number spinners; ranks are typed, never nudged. */
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+/* Disclosure arrows for the collapsible report sections. */
+details > summary {
+  list-style: none;
+}
+
+details > summary::-webkit-details-marker {
+  display: none;
+}
+
+details > summary::after {
+  content: ' ▾';
+  font-size: 0.8em;
+}
+
+details[open] > summary::after {
+  content: ' ▴';
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
 }
 
 @media print {

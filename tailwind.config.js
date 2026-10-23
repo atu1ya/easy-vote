@@ -1,6 +1,9 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: ["./index.html", "./src/**/*.{js,jsx,ts,tsx}"],
+  // Only the UI module carries class names. Scanning the counting, report and
+  // PDF modules made Tailwind mistake regexes such as /[-:T]/ for arbitrary
+  // property utilities and emit invalid CSS.
+  content: ["./index.html", "./src/main.jsx"],
   theme: {
     extend: {
       fontFamily: {
